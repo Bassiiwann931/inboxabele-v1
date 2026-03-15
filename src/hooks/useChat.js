@@ -1,7 +1,18 @@
 import { useState } from 'react';
 import { sendMessage } from '../utils/api';
 
-export function useChat() {
+// Extracts the intake JSON object from a message containing [INTAKE_COMPLETE]
+function extractIntakeJson(text) {
+  const jsonMatch = text.match(/\[INTAKE_COMPLETE\]\s*(\{[\s\S]*\})/);
+  if (!jsonMatch) return null;
+  try {
+    return JSON.parse(jsonMatch[1]);
+  } catch {
+    return null;
+  }
+}
+
+export function useChat({ onIntakeComplete } = {}) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -15,7 +26,16 @@ export function useChat() {
       const response = await sendMessage(updated);
       const assistantContent =
         response.content?.[0]?.text || 'No response received.';
+
       setMessages([...updated, { role: 'assistant', content: assistantContent }]);
+
+      // Detect [INTAKE_COMPLETE] signal and trigger plan generation
+      if (assistantContent.includes('[INTAKE_COMPLETE]') && onIntakeComplete) {
+        const intakeJson = extractIntakeJson(assistantContent);
+        if (intakeJson) {
+          onIntakeComplete(intakeJson);
+        }
+      }
     } catch {
       setMessages([
         ...updated,
